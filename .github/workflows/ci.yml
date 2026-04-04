@@ -23,8 +23,14 @@ jobs:
       - name: Build the compiler
         run: bash build.sh
 
-      - name: Compile sample program
-        run: ./build/unn ./examples/print.unn ci_print_demo
+      - name: Compile hello DSL sample program
+        run: ./build/unn ./examples/hello.dsl ci_hello_demo
 
-      - name: Run sample program
-        run: ./ci_print_demo
+      - name: Run hello DSL sample program
+        run: ./ci_hello_demo
+
+      - name: Compile full DSL sample program
+        run: ./build/unn ./examples/full_demo.dsl ci_full_demo
+
+      - name: Run full DSL sample program
+        run: ./ci_full_demo

@@ -23,7 +23,7 @@
 #endif
 
 #define WINDOW_CLASS_NAME "UnnamedLangEditorWindow"
-#define WINDOW_TITLE "Unnamed-lang Editor"
+#define WINDOW_TITLE "Namaste DSL Editor"
 
 #define OUTPUT_BAR_HEIGHT 24
 #define MIN_CODE_EDITOR_HEIGHT 140
@@ -464,18 +464,29 @@ static void load_initial_source(EditorState *state){
   char sample_path[MAX_PATH];
   char default_source_path[MAX_PATH];
 
-  resolve_source_path(state, "examples\\interactive.unn", source_path, sizeof(source_path));
+  resolve_source_path(state, "examples\\namaste_demo.dsl", source_path, sizeof(source_path));
   if(load_source_from_path(state, source_path, 0)){
     return;
   }
 
-  resolve_source_path(state, "examples\\print.unn", sample_path, sizeof(sample_path));
+  resolve_source_path(state, "examples\\hello.dsl", sample_path, sizeof(sample_path));
   if(load_source_from_path(state, sample_path, 0)){
     return;
   }
 
-  join_paths(state->project_directory, "interactive.unn", default_source_path, sizeof(default_source_path));
-  set_default_source_path(state, default_source_path, "write(\"HELLO FROM UNNAMED-LANG\", 24);\r\n\r\nexit(0);\r\n");
+  join_paths(state->project_directory, "interactive.dsl", default_source_path, sizeof(default_source_path));
+  set_default_source_path(
+    state,
+    default_source_path,
+    "namaste() {\r\n"
+    "  likho(\"NAMASTE DSL SHURU\");\r\n"
+    "\r\n"
+    "  ginti total = 21 + 21;\r\n"
+    "  likho(total);\r\n"
+    "\r\n"
+    "  niklo(0);\r\n"
+    "}\r\n"
+  );
 }
 
 static int derive_output_path_from_source(const char *source_path, char *output_path, size_t output_path_size){
@@ -483,7 +494,7 @@ static int derive_output_path_from_source(const char *source_path, char *output_
 }
 
 static int derive_source_file_name(const char *source_name, char *source_file_name, size_t source_file_name_size){
-  return derive_path_with_extension(source_name, ".unn", source_file_name, source_file_name_size);
+  return derive_path_with_extension(source_name, ".dsl", source_file_name, source_file_name_size);
 }
 
 static void append_text(char *buffer, size_t buffer_size, const char *text){
@@ -622,7 +633,7 @@ static void get_default_dialog_source_path(EditorState *state, char *source_path
 
   GetWindowTextA(state->source_path_edit, source_name, sizeof(source_name));
   if(!derive_source_path_from_name(state, source_name, source_path, source_path_size) || source_path[0] == '\0'){
-    join_paths(state->project_directory, "interactive.unn", source_path, source_path_size);
+    join_paths(state->project_directory, "interactive.dsl", source_path, source_path_size);
   }
 }
 
@@ -792,10 +803,10 @@ static void open_source_file(EditorState *state){
   open_file_name.hwndOwner = state->window_handle;
   open_file_name.lpstrFile = source_path;
   open_file_name.nMaxFile = sizeof(source_path);
-  open_file_name.lpstrFilter = "Unnamed-lang source (*.unn)\0*.unn\0All files (*.*)\0*.*\0";
+  open_file_name.lpstrFilter = "Namaste DSL source (*.dsl)\0*.dsl\0All files (*.*)\0*.*\0";
   open_file_name.nFilterIndex = 1;
   open_file_name.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
-  open_file_name.lpstrDefExt = "unn";
+  open_file_name.lpstrDefExt = "dsl";
 
   if(!GetOpenFileNameA(&open_file_name)){
     show_dialog_error(state->window_handle);
@@ -822,10 +833,10 @@ static void save_source_as(EditorState *state){
   save_file_name.hwndOwner = state->window_handle;
   save_file_name.lpstrFile = source_path;
   save_file_name.nMaxFile = sizeof(source_path);
-  save_file_name.lpstrFilter = "Unnamed-lang source (*.unn)\0*.unn\0All files (*.*)\0*.*\0";
+  save_file_name.lpstrFilter = "Namaste DSL source (*.dsl)\0*.dsl\0All files (*.*)\0*.*\0";
   save_file_name.nFilterIndex = 1;
   save_file_name.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
-  save_file_name.lpstrDefExt = "unn";
+  save_file_name.lpstrDefExt = "dsl";
 
   if(!GetSaveFileNameA(&save_file_name)){
     show_dialog_error(state->window_handle);

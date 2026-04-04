@@ -10,6 +10,7 @@ test
 test.o
 
 # Local sample sources
+interactive.dsl
 interactive.unn
 test.unn
 

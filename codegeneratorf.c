@@ -53,6 +53,7 @@ static void emit_cleanup_to_stack_size(FILE *file, size_t target_stack_size);
 static void enter_scope(void);
 static void leave_scope(FILE *file);
 static Symbol *find_symbol(const char *name);
+static Symbol *find_symbol_in_current_scope(const char *name);
 static void declare_symbol(const char *name);
 static size_t stack_offset_for_slot(size_t stack_slot);
 static void emit_load_stack_slot(FILE *file, size_t stack_slot, const char *reg);
@@ -166,14 +167,31 @@ static Symbol *find_symbol(const char *name){
   return NULL;
 }
 
+static Symbol *find_symbol_in_current_scope(const char *name){
+  size_t start_index = 0;
+
+  if(scope_count > 0){
+    start_index = scope_frames[scope_count - 1].symbol_count;
+  }
+
+  for(size_t index = symbol_count; index > start_index; index--){
+    Symbol *symbol = &symbols[index - 1];
+    if(strcmp(symbol->name, name) == 0){
+      return symbol;
+    }
+  }
+
+  return NULL;
+}
+
 static void declare_symbol(const char *name){
   if(symbol_count >= MAX_SYMBOLS){
     codegen_error("Too many declared variables");
   }
 
-  if(find_symbol(name) != NULL){
+  if(find_symbol_in_current_scope(name) != NULL){
     char error_text[256];
-    snprintf(error_text, sizeof(error_text), "Variable %s is already declared in an active scope", name);
+    snprintf(error_text, sizeof(error_text), "Variable %s is already declared in this scope", name);
     codegen_error(error_text);
   }
 
@@ -369,6 +387,14 @@ static void generate_condition_jump_false(Node *node, FILE *file, int false_labe
   }
   if(strcmp(node->value, "GREATER") == 0){
     emit_jump(file, "jle", false_label);
+    return;
+  }
+  if(strcmp(node->value, "LEQ") == 0){
+    emit_jump(file, "jg", false_label);
+    return;
+  }
+  if(strcmp(node->value, "GEQ") == 0){
+    emit_jump(file, "jl", false_label);
     return;
   }
 

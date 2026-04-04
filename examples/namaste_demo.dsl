@@ -1,0 +1,29 @@
+namaste() {
+  likho("NAMASTE DSL SHURU");
+
+  ginti total = 2 + 3 * 4;
+  likho(total);
+
+  agar(total barabar 14) {
+    likho("hisab sahi hai");
+  } warna {
+    likho("hisab galat hai");
+  }
+
+  ginti i = 0;
+  jabtak(i chhota 3) {
+    likho(i);
+    i = i + 1;
+  }
+
+  chuno(i) {
+    mamla 3:
+      likho("teen");
+      ruko;
+    baki:
+      likho("doosra mamla");
+      ruko;
+  }
+
+  niklo(0);
+}

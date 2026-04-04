@@ -1,174 +1,254 @@
-# Unnamed-lang
+# Namaste DSL Compiler
 
-Unnamed-lang is a small educational compiler written in C. It takes a `.unn` source file, tokenizes it, builds a syntax tree, generates x86-64 NASM assembly, and links that assembly into a native executable. On Windows, the project also includes a lightweight editor window for writing, compiling, and running programs from a simple GUI.
+Namaste DSL Compiler is an end-to-end compiler written in C for a Hindi-flavored domain-specific language. It reads `.dsl` source code, performs lexical analysis, parsing, semantic validation, assembly generation, and finally produces a native executable with NASM and GCC.
 
 ```text
-.unn source -> lexer -> parser -> code generator -> generated.asm -> executable
+source.dsl
+  -> lexer
+  -> parser / AST
+  -> semantic analyzer
+  -> x86-64 assembly generator
+  -> NASM object file
+  -> native executable
 ```
 
-## Highlights
+## What This Project Does
 
-- End-to-end compiler pipeline implemented in plain C
-- x86-64 assembly output through NASM
-- Native executable generation through GCC
-- Windows editor mode with open, save, compile, and output panes
-- Example programs for loops, branching, switch statements, and printing
+- Designs a custom DSL with Hindi-style keywords
+- Compiles source programs all the way to native machine executables
+- Exposes each compiler stage for debugging and demonstration
+- Includes a Windows editor for writing, compiling, and running DSL programs
+
+## Language Style
+
+The language uses simple transliterated Hindi keywords so the syntax feels distinct from C-like teaching languages.
+
+### Core words
+
+| Category | DSL words |
+| --- | --- |
+| Program entry | `namaste()` |
+| Integer type | `ginti`, `count` |
+| Output | `likho(...)`, `dikhao(...)`, `report(...)` |
+| Conditionals | `agar`, `warna`, `varna`, `when`, `otherwise` |
+| Loops | `jabtak`, `repeat` |
+| Switch flow | `chuno`, `mamla`, `baki`, `choose`, `option`, `fallback` |
+| Loop/switch control | `ruko`, `stop`, `jaari`, `skip` |
+| Program exit | `niklo(...)`, `finish(...)` |
+
+### Comparators
+
+| Meaning | Supported words |
+| --- | --- |
+| Equal | `barabar`, `same`, `eq`, `==` |
+| Not equal | `alag`, `different`, `neq`, `!=` |
+| Less than | `chhota`, `below`, `less`, `<` |
+| Greater than | `bada`, `above`, `greater`, `>` |
+| Less than or equal | `<=` |
+| Greater than or equal | `>=` |
 
 ## Example Program
 
 ```txt
-write("HELLO FROM UNNAMED-LANG", 24);
+namaste() {
+  likho("NAMASTE DSL SHURU");
 
-int number = 42;
-write(number, 2);
+  ginti total = 2 + 3 * 4;
+  likho(total);
 
-exit(0);
-```
+  agar(total barabar 14) {
+    likho("hisab sahi hai");
+  } warna {
+    likho("hisab galat hai");
+  }
 
-## What The Compiler Does
+  ginti i = 0;
+  jabtak(i chhota 3) {
+    likho(i);
+    i = i + 1;
+  }
 
-1. `lexerf.c` reads source text and converts it into tokens.
-2. `parserf.c` turns those tokens into the tree structure used by the compiler.
-3. `codegeneratorf.c` walks that structure and emits NASM assembly.
-4. `main.c` assembles and links the generated output into a runnable binary.
-
-## Supported Language Features
-
-- Integer variable declarations and reassignment
-- Integer arithmetic with `+`, `-`, `*`, `/`, and `%`
-- Comparisons with language keywords instead of C-style operators
-- `if` / `else`
-- `while`
-- `switch`, `case`, and `default`
-- `break` and `continue`
-- `write(...)` for text and integer output
-- `exit(...)`
-
-## Comparison Keywords
-
-| Keyword | Meaning |
-| --- | --- |
-| `eq` | `==` |
-| `neq` | `!=` |
-| `less` | `<` |
-| `greater` | `>` |
-
-Example:
-
-```txt
-while(i neq 10){
-  i = i + 1;
+  niklo(0);
 }
 ```
 
-## Current Limitations
+## Compiler Pipeline
 
-- No user-defined functions yet
-- No input support
-- No floating-point support
-- No arrays or string variables
+### 1. Lexical Analysis
 
-## Control-Flow Validation
+`lexerf.c` scans the source file and converts text into tokens such as keywords, identifiers, numbers, separators, operators, strings, and comparators.
 
-The compiler rejects several invalid control-flow patterns:
+### 2. Parsing
 
-- `else` without a matching `if`
-- `case` or `default` outside a `switch`
-- More than one `default` inside the same `switch`
-- `break;` outside `while` or `switch`
-- `continue;` outside `while`
+`parserf.c` builds an abstract syntax tree. The parser supports:
 
-## Project Layout
+- `namaste()` entry blocks
+- variable declarations and assignments
+- arithmetic expressions with precedence
+- `agar` / `warna`
+- `jabtak`
+- `chuno` / `mamla` / `baki`
+- `ruko` and `jaari`
+- `likho(...)`
+- `niklo(...)`
+
+### 3. Semantic Analysis
+
+`semanticf.c` validates the AST before code generation. It checks:
+
+- use of variables before declaration
+- duplicate declarations in the same scope
+- invalid `ruko` / `stop` outside loop or switch
+- invalid `jaari` / `skip` outside loop
+- duplicate `mamla` / `case` values inside one switch
+
+### 4. Code Generation
+
+`codegeneratorf.c` walks the AST and emits x86-64 NASM assembly into `generated.asm`.
+
+### 5. Native Build
+
+`main.c` invokes:
+
+- NASM to assemble `generated.asm` into `generated.o`
+- GCC to link the object file into a runnable executable
+
+## Supported Features
+
+- integer declarations
+- reassignment
+- arithmetic with `+`, `-`, `*`, `/`, `%`
+- parenthesized expressions
+- `agar` / `warna`
+- `jabtak`
+- `chuno`, `mamla`, `baki`
+- `ruko` and `jaari`
+- string output
+- integer output
+- line comments with `#` and `//`
+
+## Command-Line Usage
+
+### Build the compiler
+
+Windows:
+
+```bat
+build.cmd
+```
+
+PowerShell:
+
+```powershell
+.\build.cmd
+```
+
+Linux / WSL:
+
+```sh
+bash build.sh
+```
+
+### Compile a DSL program
+
+Windows:
+
+```powershell
+.\build\unn.exe .\examples\hello.dsl hello_demo
+```
+
+Linux / WSL:
+
+```sh
+./build/unn ./examples/hello.dsl hello_demo
+```
+
+### Show compiler stages
+
+```powershell
+.\build\unn.exe .\examples\full_demo.dsl full_demo --emit-tokens --dump-ast --dump-symbols --asm-only
+```
+
+Available flags:
+
+- `--emit-tokens`
+- `--dump-ast`
+- `--dump-symbols`
+- `--asm-only`
+
+### Run the generated program
+
+Windows:
+
+```powershell
+.\hello_demo.exe
+```
+
+Linux / WSL:
+
+```sh
+./hello_demo
+```
+
+## Windows Editor
+
+Running the compiler with no command-line arguments opens the built-in Windows editor:
+
+```powershell
+.\build\unn.exe
+```
+
+Editor features:
+
+- open and save source files
+- compile from the GUI
+- run generated executables
+- show compiler and program output in the output pane
+
+## Project Structure
 
 ```text
 .
 |-- main.c
 |-- lexerf.c / lexerf.h
 |-- parserf.c / parserf.h
+|-- semanticf.c / semanticf.h
 |-- codegeneratorf.c / codegeneratorf.h
 |-- editor_win.c / editor_win.h
-|-- hashmap/
 |-- examples/
+|-- hashmap/
 |-- build.cmd
 |-- build.ps1
 `-- build.sh
 ```
 
+## Example Programs
+
+- `examples/hello.dsl` shows a minimal DSL program with output and arithmetic.
+- `examples/loop.dsl` demonstrates `jabtak` loops.
+- `examples/control_flow.dsl` demonstrates `agar`, `chuno`, `mamla`, `baki`, `ruko`, and `jaari`.
+- `examples/fizzbuzz.dsl` demonstrates arithmetic, nested conditions, and output.
+- `examples/full_demo.dsl` shows a larger end-to-end language walkthrough.
+- `examples/namaste_demo.dsl` remains a compact Hindi-flavored showcase program.
+
 ## Requirements
 
 - GCC
 - NASM
-- Windows editor mode additionally links against `user32`, `gdi32`, and `comdlg32`
+- On Windows editor builds: `user32`, `gdi32`, and `comdlg32`
 
-## Build And Run
+## Why This Fits an End-to-End Compiler Project
 
-### Windows PowerShell
+This repository demonstrates the full compiler workflow expected in a compiler design project:
 
-Build the compiler:
+- custom source language design
+- tokenization
+- syntax analysis
+- semantic analysis
+- target-code generation
+- assembly and linking
+- execution of the final native binary
 
-```powershell
-.\build.ps1
-```
+## Current Scope
 
-If PowerShell script execution is disabled on your machine, use `.\build.cmd` instead.
-
-Compile a sample program:
-
-```powershell
-.\build\unn.exe .\examples\print.unn print_demo
-```
-
-Run the generated program:
-
-```powershell
-.\print_demo.exe
-```
-
-Open the built-in editor window:
-
-```powershell
-.\build\unn.exe
-```
-
-The editor can open or save `.unn` files, compile them, run the generated executable automatically, and show compiler plus program output in the lower output pane.
-
-### Windows Command Prompt
-
-```bat
-build.cmd
-build\unn.exe examples\print.unn print_demo
-print_demo.exe
-```
-
-### Linux Or WSL
-
-Build the CLI compiler:
-
-```sh
-bash build.sh
-```
-
-Compile and run an example:
-
-```sh
-./build/unn ./examples/fizzbuzz.unn fizzbuzz_demo
-./fizzbuzz_demo
-```
-
-The GUI editor is Windows-only. On non-Windows platforms the project builds and runs in command-line mode.
-
-## Example Programs
-
-| File | What it shows |
-| --- | --- |
-| `examples/print.unn` | Basic text and integer output |
-| `examples/while.unn` | Counting loop with repeated output |
-| `examples/fizzbuzz.unn` | Arithmetic, conditionals, and nested checks |
-| `examples/control_flow.unn` | `while`, `switch`, `break`, and `continue` |
-| `examples/full_demo.unn` | A broader language walkthrough |
-
-## Notes For GitHub
-
-- Build outputs and generated binaries are ignored through `.gitignore`
-- A basic GitHub Actions workflow is included to smoke-test the CLI compiler on pushes and pull requests
-- A license is not included yet, so choose one deliberately before publishing if you want the repository to be open-source
+The current compiler is focused on a compact DSL and intentionally keeps the implementation small and understandable. It currently targets integer-based programs with control flow and output, which makes it suitable for classroom demonstration, project evaluation, and compiler pipeline explanation.
