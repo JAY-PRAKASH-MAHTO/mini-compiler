@@ -1,0 +1,26 @@
+int i = 0;
+
+while(i less 6){
+  switch(i){
+    case 0:
+      write("ZERO", 4);
+      break;
+    case 1:
+      i = i + 1;
+      continue;
+    case 2:
+      write("TWO", 3);
+      break;
+    default:
+      if(i eq 3){
+        write("THREE", 5);
+      } else {
+        write(i, 1);
+      }
+      break;
+  }
+
+  i = i + 1;
+}
+
+exit(0);

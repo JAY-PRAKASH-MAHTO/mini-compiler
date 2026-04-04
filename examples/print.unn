@@ -1,0 +1,6 @@
+write("HELLO FROM UNNAMED-LANG", 24);
+
+int number = 42;
+write(number, 2);
+
+exit(0);

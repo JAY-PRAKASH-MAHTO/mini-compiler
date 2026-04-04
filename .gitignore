@@ -1,6 +1,37 @@
-build/main
+# Build directories
+build/
 assembly/
-generated.asm
+
+# Generated compiler output
 generated
+generated.asm
+generated.o
+test
+test.o
+
+# Local sample sources
+interactive.unn
+test.unn
+
+# Native binaries and objects
 *.o
+*.obj
 *.asm
+*.exe
+*.dll
+*.out
+*.lib
+*.exp
+*.ilk
+*.pdb
+*.stackdump
+
+# Captured output files
+*_output.txt
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.vs/

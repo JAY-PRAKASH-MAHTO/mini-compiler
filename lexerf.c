@@ -3,23 +3,7 @@
 #include <string.h>
 #include <ctype.h>
 
-typedef enum {
-  BEGINNING,
-  INT,
-  KEYWORD,
-  SEPARATOR,
-  OPERATOR,
-  IDENTIFIER,
-  STRING,
-  COMP,
-  END_OF_TOKENS,
-} TokenType;
-
-typedef struct {
-  TokenType type;
-  char *value;
-  size_t line_num;
-} Token;
+#include "lexerf.h"
 
 size_t line_number = 0;
 
@@ -65,48 +49,61 @@ void print_token(Token token){
 
 Token *generate_number(char *current, int *current_index){
   Token *token = malloc(sizeof(Token));
-  token->line_num = malloc(sizeof(size_t));
   token->line_num = line_number;
   token->type = INT;
-  char *value = malloc(sizeof(char) * 8);
-  int value_index = 0;
-  while(isdigit(current[*current_index]) && current[*current_index] != '\0'){
-    if(!isdigit(current[*current_index])){
-      break;
-    }
-    value[value_index] = current[*current_index];
-    value_index++;
+  int start_index = *current_index;
+  while(current[*current_index] != '\0' && isdigit((unsigned char)current[*current_index])){
     *current_index += 1;
   }
-  value[value_index] = '\0';
+  size_t value_length = (size_t)(*current_index - start_index);
+  char *value = malloc(value_length + 1);
+  memcpy(value, &current[start_index], value_length);
+  value[value_length] = '\0';
   token->value = value;
   return token;
 }
 
 Token *generate_keyword_or_identifier(char *current, int *current_index){
   Token *token = malloc(sizeof(Token));
-  token->line_num = malloc(sizeof(size_t));
   token->line_num = line_number;
-  char *keyword = malloc(sizeof(char) * 8);
-  int keyword_index = 0;
-  while(isalpha(current[*current_index]) && current[*current_index] != '\0'){
-    keyword[keyword_index] = current[*current_index];
-    keyword_index++;
+  int start_index = *current_index;
+  while(current[*current_index] != '\0' && isalpha((unsigned char)current[*current_index])){
     *current_index += 1;
   }
-  keyword[keyword_index] = '\0';
+  size_t keyword_length = (size_t)(*current_index - start_index);
+  char *keyword = malloc(keyword_length + 1);
+  memcpy(keyword, &current[start_index], keyword_length);
+  keyword[keyword_length] = '\0';
   if(strcmp(keyword, "exit") == 0){
     token->type = KEYWORD;
     token->value = "EXIT";
   } else if(strcmp(keyword, "int") == 0){
     token->type = KEYWORD;
     token->value = "INT";
+  } else if(strcmp(keyword, "else") == 0){
+    token->type = KEYWORD;
+    token->value = "ELSE";
   } else if(strcmp(keyword, "if") == 0){
     token->type = KEYWORD;
     token->value = "IF";
   } else if(strcmp(keyword, "while") == 0){
     token->type = KEYWORD;
     token->value = "WHILE";
+  } else if(strcmp(keyword, "switch") == 0){
+    token->type = KEYWORD;
+    token->value = "SWITCH";
+  } else if(strcmp(keyword, "case") == 0){
+    token->type = KEYWORD;
+    token->value = "CASE";
+  } else if(strcmp(keyword, "default") == 0){
+    token->type = KEYWORD;
+    token->value = "DEFAULT";
+  } else if(strcmp(keyword, "break") == 0){
+    token->type = KEYWORD;
+    token->value = "BREAK";
+  } else if(strcmp(keyword, "continue") == 0){
+    token->type = KEYWORD;
+    token->value = "CONTINUE";
   } else if(strcmp(keyword, "write") == 0){
     token->type = KEYWORD;
     token->value = "WRITE";
@@ -131,17 +128,16 @@ Token *generate_keyword_or_identifier(char *current, int *current_index){
 
 Token *generate_string_token(char *current, int *current_index){
   Token *token = malloc(sizeof(Token));
-  token->line_num = malloc(sizeof(size_t));
   token->line_num = line_number;
-  char *value = malloc(sizeof(char) * 64);
-  int value_index = 0;
   *current_index += 1;
-  while(current[*current_index] != '"'){
-    value[value_index] = current[*current_index];
-    value_index++;
+  int start_index = *current_index;
+  while(current[*current_index] != '\0' && current[*current_index] != '"'){
     *current_index += 1;
   }
-  value[value_index] = '\0';
+  size_t value_length = (size_t)(*current_index - start_index);
+  char *value = malloc(value_length + 1);
+  memcpy(value, &current[start_index], value_length);
+  value[value_length] = '\0';
   token->type = STRING;
   token->value = value;
   return token;
@@ -152,7 +148,6 @@ Token *generate_separator_or_operator(char *current, int *current_index, TokenTy
   token->value = malloc(sizeof(char) * 2);
   token->value[0] = current[*current_index];
   token->value[1] = '\0';
-  token->line_num = malloc(sizeof(size_t));
   token->line_num = line_number;
   token->type = type;
   return token;
@@ -164,11 +159,13 @@ Token *lexer(FILE *file){
   int length;
   char *current = 0;
 
+  line_number = 1;
+
   fseek(file, 0, SEEK_END);
   length = ftell(file);
   fseek(file, 0, SEEK_SET);
 
-  current = malloc(sizeof(char) * length);
+  current = malloc((size_t)length + 1);
   fread(current, 1, length, file);
 
   fclose(file);
@@ -189,6 +186,10 @@ Token *lexer(FILE *file){
       tokens = realloc(tokens, sizeof(Token) * number_of_tokens);
     }
     if(current[current_index] == ';'){
+      token = generate_separator_or_operator(current, &current_index, SEPARATOR);
+      tokens[tokens_index] = *token;
+      tokens_index++;
+    } else if(current[current_index] == ':'){
       token = generate_separator_or_operator(current, &current_index, SEPARATOR);
       tokens[tokens_index] = *token;
       tokens_index++;
@@ -256,8 +257,9 @@ Token *lexer(FILE *file){
     free(token);
     current_index++;
   }
-  tokens[tokens_index].value = '\0';
+  tokens[tokens_index].value = NULL;
   tokens[tokens_index].type = END_OF_TOKENS;
+  tokens[tokens_index].line_num = line_number;
   return tokens;
 }
 

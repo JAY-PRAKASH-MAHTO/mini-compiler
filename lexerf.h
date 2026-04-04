@@ -1,6 +1,9 @@
 #ifndef LEXER_H_
 #define LEXER_H_
 
+#include <stddef.h>
+#include <stdio.h>
+
 typedef enum {
   BEGINNING,
   INT,
