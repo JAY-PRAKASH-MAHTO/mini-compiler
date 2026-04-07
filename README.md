@@ -1,57 +1,55 @@
-# Namaste DSL Compiler
+# BhasaCore
 
-Namaste DSL Compiler is an end-to-end compiler written in C for a Hindi-flavored domain-specific language. It reads `.dsl` source code, performs lexical analysis, parsing, semantic validation, assembly generation, and finally produces a native executable with NASM and GCC.
+BhasaCore is an end-to-end compiler written in C for a Hindi-flavored domain-specific language. It reads `.hin` source files, performs lexical analysis, parsing, semantic checking, assembly generation, and produces native executables through GCC.
 
 ```text
-source.dsl
+source.hin
   -> lexer
   -> parser / AST
   -> semantic analyzer
   -> x86-64 assembly generator
-  -> NASM object file
+  -> object file
   -> native executable
 ```
 
-## What This Project Does
+## What BhasaCore Does
 
-- Designs a custom DSL with Hindi-style keywords
-- Compiles source programs all the way to native machine executables
-- Exposes each compiler stage for debugging and demonstration
-- Includes a Windows editor for writing, compiling, and running DSL programs
+- Compiles `.hin` programs into native executables
+- Exposes the full compiler pipeline for learning and debugging
+- Supports variables, arithmetic, conditions, loops, `chuno` blocks, and output
+- Includes a Windows editor for writing, compiling, and running programs
+- Falls back to GCC's assembler when NASM is not available
 
-## Language Style
+## Complete Keyword Reference
 
-The language uses simple transliterated Hindi keywords so the syntax feels distinct from C-like teaching languages.
+| Category | Keyword / Token | Equivalent / Description |
+| --- | --- | --- |
+| Program Entry | `namaste` | Top-level program entry written as `namaste() { ... }` |
+| Type | `ginti` | Integer variable declaration |
+| Control Flow | `agar` | Conditional branch |
+| Control Flow | `warna` | Alternative branch |
+| Control Flow | `jabtak` | Iterative loop |
+| Control Flow | `chuno` | Multi-way branch selector |
+| Control Flow | `mamla` | Case label inside `chuno` |
+| Control Flow | `baki` | Default case inside `chuno` |
+| Control Flow | `ruko` | Exit a `jabtak` loop or `chuno` block |
+| Control Flow | `jaari` | Skip to the next `jabtak` iteration |
+| Comparator | `barabar` | Equality comparison (`==`) |
+| Comparator | `alag` | Inequality comparison (`!=`) |
+| Comparator | `chhota` | Less-than comparison (`<`) |
+| Comparator | `bada` | Greater-than comparison (`>`) |
+| Comparator | `<=` | Less-than-or-equal comparison |
+| Comparator | `>=` | Greater-than-or-equal comparison |
+| Built-in | `likho` | Output text or integer values |
+| Built-in | `niklo` | Structured program termination |
 
-### Core words
-
-| Category | DSL words |
-| --- | --- |
-| Program entry | `namaste()` |
-| Integer type | `ginti`, `count` |
-| Output | `likho(...)`, `dikhao(...)`, `report(...)` |
-| Conditionals | `agar`, `warna`, `varna`, `when`, `otherwise` |
-| Loops | `jabtak`, `repeat` |
-| Switch flow | `chuno`, `mamla`, `baki`, `choose`, `option`, `fallback` |
-| Loop/switch control | `ruko`, `stop`, `jaari`, `skip` |
-| Program exit | `niklo(...)`, `finish(...)` |
-
-### Comparators
-
-| Meaning | Supported words |
-| --- | --- |
-| Equal | `barabar`, `same`, `eq`, `==` |
-| Not equal | `alag`, `different`, `neq`, `!=` |
-| Less than | `chhota`, `below`, `less`, `<` |
-| Greater than | `bada`, `above`, `greater`, `>` |
-| Less than or equal | `<=` |
-| Greater than or equal | `>=` |
+Table 1. BhasaCore keyword and comparator mapping.
 
 ## Example Program
 
 ```txt
 namaste() {
-  likho("NAMASTE DSL SHURU");
+  likho("BHASACORE DEMO SHURU");
 
   ginti total = 2 + 3 * 4;
   likho(total);
@@ -72,17 +70,23 @@ namaste() {
 }
 ```
 
-## Compiler Pipeline
+## Compiler Stages
 
 ### 1. Lexical Analysis
 
-`lexerf.c` scans the source file and converts text into tokens such as keywords, identifiers, numbers, separators, operators, strings, and comparators.
+`lexerf.c` tokenizes keywords, identifiers, integers, strings, separators, operators, and comparators.
+
+It supports:
+
+- line comments with `#` and `//`
+- block comments with `/* ... */`
+- a single Hindi keyword for each language construct
 
 ### 2. Parsing
 
-`parserf.c` builds an abstract syntax tree. The parser supports:
+`parserf.c` builds the abstract syntax tree and handles:
 
-- `namaste()` entry blocks
+- program entry blocks
 - variable declarations and assignments
 - arithmetic expressions with precedence
 - `agar` / `warna`
@@ -96,113 +100,196 @@ namaste() {
 
 `semanticf.c` validates the AST before code generation. It checks:
 
-- use of variables before declaration
+- variable use before declaration
 - duplicate declarations in the same scope
-- invalid `ruko` / `stop` outside loop or switch
-- invalid `jaari` / `skip` outside loop
-- duplicate `mamla` / `case` values inside one switch
+- invalid `ruko` outside loop or switch
+- invalid `jaari` outside loop
+- duplicate `mamla` values inside a `chuno` block
 
 ### 4. Code Generation
 
-`codegeneratorf.c` walks the AST and emits x86-64 NASM assembly into `generated.asm`.
+`codegeneratorf.c` emits x86-64 assembly.
 
-### 5. Native Build
+- NASM syntax is used when NASM is available
+- GAS Intel syntax is used automatically when NASM is missing and GCC fallback assembly is needed
 
-`main.c` invokes:
+### 5. Native Build Driver
 
-- NASM to assemble `generated.asm` into `generated.o`
-- GCC to link the object file into a runnable executable
+`main.c` coordinates the full build:
 
-## Supported Features
+- reads `.hin` source input
+- runs lexer, parser, semantic analysis, and code generation
+- assembles generated output
+- links the final executable with GCC
+
+## Supported Language Features
 
 - integer declarations
 - reassignment
 - arithmetic with `+`, `-`, `*`, `/`, `%`
 - parenthesized expressions
+- string output
+- integer output
 - `agar` / `warna`
 - `jabtak`
 - `chuno`, `mamla`, `baki`
 - `ruko` and `jaari`
-- string output
-- integer output
-- line comments with `#` and `//`
+- comments with `#`, `//`, and `/* ... */`
 
-## Command-Line Usage
+## Temporary File Behavior
 
-### Build the compiler
+For full native builds, BhasaCore generates temporary assembly and object files using the compiler process ID, for example:
 
-Windows:
-
-```bat
-build.cmd
+```text
+temp_12345.asm
+temp_12345.o
 ```
 
-PowerShell:
+Behavior:
+
+- successful full builds remove temporary files automatically
+- `--keep-temps` or `-k` keeps temporary files for inspection
+- failed builds leave temporary files in place for debugging
+- `--asm-only` writes the final assembly to `<output>.asm`
+
+## Toolchain Requirements
+
+### Linux / Ubuntu / WSL
+
+```sh
+sudo apt-get update
+sudo apt-get install -y gcc nasm make
+```
+
+### Windows
+
+Install `gcc` and ensure it is available in `PATH`. NASM is recommended, but native builds can still work without it because BhasaCore falls back to GCC's assembler when needed.
+
+Common options:
+
+- MSYS2 / MinGW-w64 for `gcc`
+- NASM official installer for `nasm`
+
+On Windows, BhasaCore also checks common NASM install locations such as `%LOCALAPPDATA%\bin\NASM\nasm.exe` if `nasm` is not already available in `PATH`.
+
+Verify your setup with:
 
 ```powershell
-.\build.cmd
+gcc --version
+nasm --version
 ```
 
-Linux / WSL:
+## Building
+
+### Linux / WSL with Makefile
+
+```sh
+make
+```
+
+Clean build output:
+
+```sh
+make clean
+```
+
+### Linux / WSL with shell script
 
 ```sh
 bash build.sh
 ```
 
-### Compile a DSL program
+### Windows Command Prompt
+
+```bat
+build.cmd
+```
+
+### Windows PowerShell
+
+```powershell
+.\build.ps1
+```
+
+## Command-Line Usage
+
+### Compile a `.hin` program
 
 Windows:
 
 ```powershell
-.\build\unn.exe .\examples\hello.dsl hello_demo
+.\build\bhasacore.exe .\examples\hello.hin hello_demo
 ```
 
 Linux / WSL:
 
 ```sh
-./build/unn ./examples/hello.dsl hello_demo
+./build/bhasacore ./examples/hello.hin hello_demo
+```
+
+### Generate assembly only
+
+Windows:
+
+```powershell
+.\build\bhasacore.exe .\examples\full_demo.hin full_demo --asm-only
+```
+
+Linux / WSL:
+
+```sh
+./build/bhasacore ./examples/full_demo.hin full_demo --asm-only
+```
+
+### Keep temporary files
+
+```powershell
+.\build\bhasacore.exe .\examples\hello.hin hello_demo --keep-temps
 ```
 
 ### Show compiler stages
 
 ```powershell
-.\build\unn.exe .\examples\full_demo.dsl full_demo --emit-tokens --dump-ast --dump-symbols --asm-only
+.\build\bhasacore.exe .\examples\full_demo.hin full_demo --emit-tokens --dump-ast --dump-symbols --asm-only
 ```
 
-Available flags:
+### Show help
+
+```powershell
+.\build\bhasacore.exe --help
+```
+
+Supported flags:
 
 - `--emit-tokens`
 - `--dump-ast`
 - `--dump-symbols`
 - `--asm-only`
-
-### Run the generated program
-
-Windows:
-
-```powershell
-.\hello_demo.exe
-```
-
-Linux / WSL:
-
-```sh
-./hello_demo
-```
+- `--keep-temps`
+- `-k`
+- `--help`
+- `-h`
+- `--no-editor`
 
 ## Windows Editor
 
-Running the compiler with no command-line arguments opens the built-in Windows editor:
+Running the compiler with no command-line arguments opens the built-in editor.
 
 ```powershell
-.\build\unn.exe
+.\build\bhasacore.exe
+```
+
+Use `--no-editor` to print CLI usage instead of launching the GUI:
+
+```powershell
+.\build\bhasacore.exe --no-editor
 ```
 
 Editor features:
 
-- open and save source files
-- compile from the GUI
-- run generated executables
+- open and save `.hin` source files
+- compile directly from the GUI
+- run the generated executable
 - show compiler and program output in the output pane
 
 ## Project Structure
@@ -210,6 +297,7 @@ Editor features:
 ```text
 .
 |-- main.c
+|-- diagnostics.c / diagnostics.h
 |-- lexerf.c / lexerf.h
 |-- parserf.c / parserf.h
 |-- semanticf.c / semanticf.h
@@ -217,6 +305,7 @@ Editor features:
 |-- editor_win.c / editor_win.h
 |-- examples/
 |-- hashmap/
+|-- Makefile
 |-- build.cmd
 |-- build.ps1
 `-- build.sh
@@ -224,31 +313,25 @@ Editor features:
 
 ## Example Programs
 
-- `examples/hello.dsl` shows a minimal DSL program with output and arithmetic.
-- `examples/loop.dsl` demonstrates `jabtak` loops.
-- `examples/control_flow.dsl` demonstrates `agar`, `chuno`, `mamla`, `baki`, `ruko`, and `jaari`.
-- `examples/fizzbuzz.dsl` demonstrates arithmetic, nested conditions, and output.
-- `examples/full_demo.dsl` shows a larger end-to-end language walkthrough.
-- `examples/namaste_demo.dsl` remains a compact Hindi-flavored showcase program.
+- `examples/hello.hin` shows a minimal output and arithmetic program
+- `examples/loop.hin` demonstrates `jabtak`
+- `examples/control_flow.hin` demonstrates `agar`, `chuno`, `mamla`, `baki`, `ruko`, and `jaari`
+- `examples/fizzbuzz.hin` demonstrates nested conditions and arithmetic
+- `examples/full_demo.hin` shows a larger end-to-end language walkthrough
+- `examples/namaste_demo.hin` is a compact showcase program
 
-## Requirements
+## Why This Project Fits Compiler Design
 
-- GCC
-- NASM
-- On Windows editor builds: `user32`, `gdi32`, and `comdlg32`
+BhasaCore demonstrates the full workflow expected in a compiler design project:
 
-## Why This Fits an End-to-End Compiler Project
-
-This repository demonstrates the full compiler workflow expected in a compiler design project:
-
-- custom source language design
+- source language design
 - tokenization
 - syntax analysis
 - semantic analysis
-- target-code generation
+- target code generation
 - assembly and linking
 - execution of the final native binary
 
 ## Current Scope
 
-The current compiler is focused on a compact DSL and intentionally keeps the implementation small and understandable. It currently targets integer-based programs with control flow and output, which makes it suitable for classroom demonstration, project evaluation, and compiler pipeline explanation.
+BhasaCore is intentionally compact and focused on clarity. It is suitable for classroom demonstration, project evaluation, and explaining how a complete compiler pipeline works from source code to executable output.

@@ -1,6 +1,7 @@
 # Build directories
 build/
 assembly/
+patakha_reference/
 
 # Generated compiler output
 generated
@@ -11,8 +12,8 @@ test.o
 
 # Local sample sources
 interactive.dsl
-interactive.unn
-test.unn
+interactive.hin
+test.hin
 
 # Native binaries and objects
 *.o

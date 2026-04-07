@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "diagnostics.h"
+
 typedef enum {
   BEGINNING,
   INT,
@@ -25,10 +27,7 @@ typedef struct {
 
 void print_token(Token token);
 void print_tokens(Token *tokens);
-Token *generate_number(char *current, int *current_index);
-Token *generate_keyword_or_identifier(char *current, int *current_index);
-Token *generate_string_token(char *current, int *current_index);
-Token *generate_separator_or_operator(char *current, int *current_index, TokenType type);
-Token *lexer(FILE *file);
+Token *lexer(FILE *file, ErrorList *errors);
+void free_tokens(Token *tokens);
 
 #endif

@@ -2,12 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "hashmap/hashmap.h"
 #include "semanticf.h"
-
-#define MAX_SEMANTIC_SYMBOLS 1024
-#define MAX_SEMANTIC_SCOPES 256
-#define MAX_DECLARED_SYMBOLS 1024
-#define MAX_SWITCH_CASES 256
 
 typedef struct {
   const char *name;
@@ -15,22 +11,34 @@ typedef struct {
   size_t scope_depth;
 } SemanticSymbol;
 
-static SemanticSymbol active_symbols[MAX_SEMANTIC_SYMBOLS];
-static size_t active_symbol_count = 0;
-static size_t scope_symbol_counts[MAX_SEMANTIC_SCOPES];
-static size_t scope_depth = 0;
-static SemanticSymbol declared_symbols[MAX_DECLARED_SYMBOLS];
-static size_t declared_symbol_count = 0;
+typedef struct Scope {
+  hashmap_t symbols;
+  size_t scope_depth;
+  struct Scope *parent;
+} Scope;
+
+typedef struct {
+  SemanticSymbol **items;
+  size_t count;
+  size_t capacity;
+} DeclarationList;
+
+static ErrorList *semantic_error_list = NULL;
+static Scope *current_scope = NULL;
+static DeclarationList declared_symbols = {NULL, 0, 0};
 static size_t loop_depth = 0;
 static size_t switch_depth = 0;
 
+static void *checked_malloc(size_t size);
+static void *checked_realloc(void *memory, size_t size);
 static int node_value_is(const Node *node, const char *value);
 static void semantic_error(const char *message, size_t line_num);
-static void enter_scope(void);
+static int push_declared_symbol(SemanticSymbol *symbol);
+static int enter_scope(void);
 static void leave_scope(void);
+static SemanticSymbol *find_symbol_in_scope(Scope *scope, const char *name);
 static SemanticSymbol *find_symbol(const char *name);
 static SemanticSymbol *find_symbol_in_current_scope(const char *name);
-static void remember_declared_symbol(const char *name, size_t line_num);
 static void declare_symbol(const char *name, size_t line_num);
 static void analyze_expression(Node *node);
 static void analyze_condition(Node *node);
@@ -39,91 +47,136 @@ static void analyze_block(Node *block_node);
 static void analyze_switch_statement(Node *node);
 static void analyze_statement(Node *node);
 static void dump_symbols_table(void);
+static void semantic_cleanup(void);
+
+static void *checked_malloc(size_t size){
+  void *memory = malloc(size);
+
+  if(memory == NULL){
+    fprintf(stderr, "FATAL: out of memory during semantic analysis\n");
+    exit(1);
+  }
+
+  return memory;
+}
+
+static void *checked_realloc(void *memory, size_t size){
+  void *resized_memory = realloc(memory, size);
+
+  if(resized_memory == NULL){
+    fprintf(stderr, "FATAL: out of memory during semantic analysis\n");
+    exit(1);
+  }
+
+  return resized_memory;
+}
 
 static int node_value_is(const Node *node, const char *value){
   return node != NULL && strcmp(node->value, value) == 0;
 }
 
 static void semantic_error(const char *message, size_t line_num){
-  fprintf(stderr, "SEMANTIC ERROR: %s on line %zu\n", message, line_num);
-  exit(1);
+  error_list_add(semantic_error_list, "Semantic", line_num, "%s", message);
 }
 
-static void enter_scope(void){
-  if(scope_depth >= MAX_SEMANTIC_SCOPES){
-    semantic_error("Scope nesting limit reached", 0);
+static int push_declared_symbol(SemanticSymbol *symbol){
+  if(declared_symbols.count == declared_symbols.capacity){
+    size_t new_capacity = declared_symbols.capacity == 0 ? 8 : declared_symbols.capacity * 2;
+
+    declared_symbols.items = checked_realloc(declared_symbols.items, sizeof(SemanticSymbol *) * new_capacity);
+    declared_symbols.capacity = new_capacity;
   }
 
-  scope_symbol_counts[scope_depth] = active_symbol_count;
-  scope_depth++;
+  declared_symbols.items[declared_symbols.count] = symbol;
+  declared_symbols.count++;
+  return 1;
+}
+
+static int enter_scope(void){
+  Scope *scope = checked_malloc(sizeof(Scope));
+  unsigned int initial_capacity = 32;
+
+  if(hashmap_create(initial_capacity, &scope->symbols) != 0){
+    free(scope);
+    semantic_error("Could not create scope symbol table", 0);
+    return 0;
+  }
+
+  scope->parent = current_scope;
+  scope->scope_depth = current_scope == NULL ? 1 : current_scope->scope_depth + 1;
+  current_scope = scope;
+  return 1;
 }
 
 static void leave_scope(void){
-  if(scope_depth == 0){
+  Scope *scope_to_free;
+
+  if(current_scope == NULL){
     semantic_error("Tried to leave a scope that was never entered", 0);
+    return;
   }
 
-  scope_depth--;
-  active_symbol_count = scope_symbol_counts[scope_depth];
+  scope_to_free = current_scope;
+  current_scope = current_scope->parent;
+  hashmap_destroy(&scope_to_free->symbols);
+  free(scope_to_free);
+}
+
+static SemanticSymbol *find_symbol_in_scope(Scope *scope, const char *name){
+  if(scope == NULL){
+    return NULL;
+  }
+
+  return (SemanticSymbol *)hashmap_get(&scope->symbols, name, (hashmap_uint32_t)strlen(name));
 }
 
 static SemanticSymbol *find_symbol(const char *name){
-  for(size_t index = active_symbol_count; index > 0; index--){
-    SemanticSymbol *symbol = &active_symbols[index - 1];
-    if(strcmp(symbol->name, name) == 0){
+  Scope *scope = current_scope;
+
+  while(scope != NULL){
+    SemanticSymbol *symbol = find_symbol_in_scope(scope, name);
+
+    if(symbol != NULL){
       return symbol;
     }
+    scope = scope->parent;
   }
 
   return NULL;
 }
 
 static SemanticSymbol *find_symbol_in_current_scope(const char *name){
-  size_t start_index = 0;
-
-  if(scope_depth > 0){
-    start_index = scope_symbol_counts[scope_depth - 1];
-  }
-
-  for(size_t index = active_symbol_count; index > start_index; index--){
-    SemanticSymbol *symbol = &active_symbols[index - 1];
-    if(strcmp(symbol->name, name) == 0){
-      return symbol;
-    }
-  }
-
-  return NULL;
-}
-
-static void remember_declared_symbol(const char *name, size_t line_num){
-  if(declared_symbol_count >= MAX_DECLARED_SYMBOLS){
-    semantic_error("Symbol table dump limit reached", line_num);
-  }
-
-  declared_symbols[declared_symbol_count].name = name;
-  declared_symbols[declared_symbol_count].line_num = line_num;
-  declared_symbols[declared_symbol_count].scope_depth = scope_depth;
-  declared_symbol_count++;
+  return find_symbol_in_scope(current_scope, name);
 }
 
 static void declare_symbol(const char *name, size_t line_num){
+  SemanticSymbol *symbol;
   char error_text[256];
 
-  if(active_symbol_count >= MAX_SEMANTIC_SYMBOLS){
-    semantic_error("Too many declared variables", line_num);
+  if(current_scope == NULL){
+    semantic_error("No active scope for declaration", line_num);
+    return;
   }
 
   if(find_symbol_in_current_scope(name) != NULL){
     snprintf(error_text, sizeof(error_text), "Variable %s is already declared in this scope", name);
     semantic_error(error_text, line_num);
+    return;
   }
 
-  active_symbols[active_symbol_count].name = name;
-  active_symbols[active_symbol_count].line_num = line_num;
-  active_symbols[active_symbol_count].scope_depth = scope_depth;
-  active_symbol_count++;
+  symbol = checked_malloc(sizeof(SemanticSymbol));
+  symbol->name = name;
+  symbol->line_num = line_num;
+  symbol->scope_depth = current_scope->scope_depth;
 
-  remember_declared_symbol(name, line_num);
+  if(hashmap_put(&current_scope->symbols, name, (hashmap_uint32_t)strlen(name), symbol) != 0){
+    free(symbol);
+    snprintf(error_text, sizeof(error_text), "Could not store symbol %s", name);
+    semantic_error(error_text, line_num);
+    return;
+  }
+
+  push_declared_symbol(symbol);
 }
 
 static void analyze_expression(Node *node){
@@ -132,9 +185,14 @@ static void analyze_expression(Node *node){
 
   if(node == NULL){
     semantic_error("Missing expression", 0);
+    return;
   }
 
   if(node->type == INT){
+    return;
+  }
+
+  if(node->type == STRING){
     return;
   }
 
@@ -159,6 +217,7 @@ static void analyze_expression(Node *node){
 static void analyze_condition(Node *node){
   if(node == NULL || node->type != COMP){
     semantic_error("Invalid condition", node == NULL ? 0 : node->line_num);
+    return;
   }
 
   analyze_expression(node->left);
@@ -177,9 +236,13 @@ static void analyze_statement_list(Node *node){
 static void analyze_block(Node *block_node){
   if(block_node == NULL || !node_value_is(block_node, "BLOCK")){
     semantic_error("Expected a block node", block_node == NULL ? 0 : block_node->line_num);
+    return;
   }
 
-  enter_scope();
+  if(!enter_scope()){
+    return;
+  }
+
   analyze_statement_list(block_node->left);
   leave_scope();
 }
@@ -187,15 +250,22 @@ static void analyze_block(Node *block_node){
 static void analyze_switch_statement(Node *node){
   Node *switch_data;
   Node *clause_node;
-  const char *seen_cases[MAX_SWITCH_CASES];
-  size_t case_count = 0;
+  hashmap_t seen_cases;
+  int cases_ready = 0;
 
   if(node == NULL || !node_value_is(node, "SWITCH") || node->left == NULL){
-    semantic_error("Malformed switch statement", node == NULL ? 0 : node->line_num);
+    semantic_error("Malformed chuno statement", node == NULL ? 0 : node->line_num);
+    return;
   }
 
   switch_data = node->left;
   analyze_expression(switch_data->left);
+
+  if(hashmap_create(16, &seen_cases) == 0){
+    cases_ready = 1;
+  } else {
+    semantic_error("Could not create chuno-mamla lookup table", node->line_num);
+  }
 
   switch_depth++;
   clause_node = switch_data->right;
@@ -206,31 +276,31 @@ static void analyze_switch_statement(Node *node){
 
       if(case_data == NULL || case_data->left == NULL || case_data->right == NULL){
         semantic_error("Malformed case clause", clause_node->line_num);
-      }
-
-      case_value = case_data->left;
-      for(size_t index = 0; index < case_count; index++){
-        if(strcmp(seen_cases[index], case_value->value) == 0){
-          semantic_error("Duplicate case value inside switch", case_value->line_num);
+      } else {
+        case_value = case_data->left;
+        if(cases_ready){
+          if(hashmap_get(&seen_cases, case_value->value, (hashmap_uint32_t)strlen(case_value->value)) != NULL){
+            semantic_error("Duplicate mamla value inside chuno", case_value->line_num);
+          } else if(hashmap_put(&seen_cases, case_value->value, (hashmap_uint32_t)strlen(case_value->value), case_value) != 0){
+            semantic_error("Could not record mamla value", case_value->line_num);
+          }
         }
-      }
 
-      if(case_count >= MAX_SWITCH_CASES){
-        semantic_error("Too many switch cases", clause_node->line_num);
+        analyze_block(case_data->right);
       }
-
-      seen_cases[case_count] = case_value->value;
-      case_count++;
-      analyze_block(case_data->right);
     } else if(node_value_is(clause_node, "DEFAULT")){
       analyze_block(clause_node->left);
     } else {
-      semantic_error("Unknown switch clause", clause_node->line_num);
+      semantic_error("Unknown chuno clause", clause_node->line_num);
     }
 
     clause_node = clause_node->right;
   }
   switch_depth--;
+
+  if(cases_ready){
+    hashmap_destroy(&seen_cases);
+  }
 }
 
 static void analyze_statement(Node *node){
@@ -243,6 +313,7 @@ static void analyze_statement(Node *node){
   if(node_value_is(node, "INT")){
     if(node->left == NULL || node->left->type != IDENTIFIER){
       semantic_error("Malformed variable declaration", node->line_num);
+      return;
     }
 
     analyze_expression(node->left->left);
@@ -270,6 +341,7 @@ static void analyze_statement(Node *node){
 
     if(args_node == NULL || args_node->left == NULL){
       semantic_error("Malformed write statement", node->line_num);
+      return;
     }
 
     if(args_node->left->type != STRING){
@@ -288,6 +360,7 @@ static void analyze_statement(Node *node){
 
     if(if_data == NULL || if_data->left == NULL || if_data->right == NULL){
       semantic_error("Malformed if statement", node->line_num);
+      return;
     }
 
     then_block = if_data->right;
@@ -307,7 +380,8 @@ static void analyze_statement(Node *node){
     Node *loop_data = node->left;
 
     if(loop_data == NULL || loop_data->left == NULL || loop_data->right == NULL){
-      semantic_error("Malformed while statement", node->line_num);
+      semantic_error("Malformed jabtak statement", node->line_num);
+      return;
     }
 
     analyze_condition(loop_data->left);
@@ -324,14 +398,14 @@ static void analyze_statement(Node *node){
 
   if(node_value_is(node, "BREAK")){
     if(loop_depth == 0 && switch_depth == 0){
-      semantic_error("break can only be used inside while or switch", node->line_num);
+      semantic_error("ruko can only be used inside jabtak or chuno", node->line_num);
     }
     return;
   }
 
   if(node_value_is(node, "CONTINUE")){
     if(loop_depth == 0){
-      semantic_error("continue can only be used inside while", node->line_num);
+      semantic_error("jaari can only be used inside jabtak", node->line_num);
     }
     return;
   }
@@ -341,30 +415,53 @@ static void analyze_statement(Node *node){
 
 static void dump_symbols_table(void){
   printf("Symbol table:\n");
-  for(size_t index = 0; index < declared_symbol_count; index++){
-    printf("  %s (line %zu, scope %zu)\n",
-      declared_symbols[index].name,
-      declared_symbols[index].line_num,
-      declared_symbols[index].scope_depth);
+  for(size_t index = 0; index < declared_symbols.count; index++){
+    SemanticSymbol *symbol = declared_symbols.items[index];
+
+    printf("  %s (line %zu, scope %zu)\n", symbol->name, symbol->line_num, symbol->scope_depth);
   }
 }
 
-void semantic_analyze(Node *root, int dump_symbols){
-  if(root == NULL){
-    semantic_error("Missing program root", 0);
+static void semantic_cleanup(void){
+  while(current_scope != NULL){
+    leave_scope();
   }
 
-  active_symbol_count = 0;
-  scope_depth = 0;
-  declared_symbol_count = 0;
+  for(size_t index = 0; index < declared_symbols.count; index++){
+    free(declared_symbols.items[index]);
+  }
+
+  free(declared_symbols.items);
+  declared_symbols.items = NULL;
+  declared_symbols.count = 0;
+  declared_symbols.capacity = 0;
+  loop_depth = 0;
+  switch_depth = 0;
+}
+
+void semantic_analyze(Node *root, int dump_symbols, ErrorList *errors){
+  semantic_error_list = errors;
+  current_scope = NULL;
+  declared_symbols.items = NULL;
+  declared_symbols.count = 0;
+  declared_symbols.capacity = 0;
   loop_depth = 0;
   switch_depth = 0;
 
-  enter_scope();
-  analyze_statement_list(root->left);
-  leave_scope();
+  if(root == NULL){
+    semantic_error("Missing program root", 0);
+    semantic_cleanup();
+    return;
+  }
+
+  if(enter_scope()){
+    analyze_statement_list(root->left);
+    leave_scope();
+  }
 
   if(dump_symbols){
     dump_symbols_table();
   }
+
+  semantic_cleanup();
 }

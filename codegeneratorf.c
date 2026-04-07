@@ -1,8 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <setjmp.h>
 #include <string.h>
 
-#include "parserf.h"
+#include "codegeneratorf.h"
 
 #define MAX_STACK_ENTRIES 1024
 #define MAX_SYMBOLS 1024
@@ -41,10 +42,15 @@ static ControlContext control_contexts[MAX_CONTROL_CONTEXTS];
 static size_t control_context_count = 0;
 static int next_label_id = 0;
 static int next_string_label_id = 0;
+static jmp_buf codegen_recovery_point;
+static FILE *active_output_file = NULL;
+static char last_codegen_error_message[256];
+static AssemblySyntax active_assembly_syntax = ASM_SYNTAX_NASM;
 
 static int node_value_is(const Node *node, const char *value);
 static void codegen_error(const char *message);
 static int create_label_id(void);
+static int using_gas_intel_syntax(void);
 static void emit_label(FILE *file, int label_id);
 static void emit_jump(FILE *file, const char *instruction, int label_id);
 static void emit_push_reg(FILE *file, const char *reg);
@@ -82,14 +88,28 @@ static void generate_switch_statement(Node *node, FILE *file);
 static void generate_break_statement(FILE *file);
 static void generate_continue_statement(FILE *file);
 static void generate_statement(Node *node, FILE *file);
+static void emit_data_section(FILE *file);
+static void emit_text_section(FILE *file);
 
 static int node_value_is(const Node *node, const char *value){
   return node != NULL && strcmp(node->value, value) == 0;
 }
 
 static void codegen_error(const char *message){
-  fprintf(stderr, "ERROR: %s\n", message);
-  exit(1);
+  snprintf(last_codegen_error_message, sizeof(last_codegen_error_message), "%s", message);
+  if(active_output_file != NULL){
+    fclose(active_output_file);
+    active_output_file = NULL;
+  }
+  longjmp(codegen_recovery_point, 1);
+}
+
+const char *codegenerator_last_error(void){
+  return last_codegen_error_message;
+}
+
+static int using_gas_intel_syntax(void){
+  return active_assembly_syntax == ASM_SYNTAX_GAS_INTEL;
 }
 
 static int create_label_id(void){
@@ -209,11 +229,19 @@ static size_t stack_offset_for_slot(size_t stack_slot){
 }
 
 static void emit_load_stack_slot(FILE *file, size_t stack_slot, const char *reg){
-  fprintf(file, "  mov %s, QWORD [rsp + %zu]\n", reg, stack_offset_for_slot(stack_slot));
+  if(using_gas_intel_syntax()){
+    fprintf(file, "  mov %s, QWORD PTR [rsp + %zu]\n", reg, stack_offset_for_slot(stack_slot));
+  } else {
+    fprintf(file, "  mov %s, QWORD [rsp + %zu]\n", reg, stack_offset_for_slot(stack_slot));
+  }
 }
 
 static void emit_store_stack_slot(FILE *file, size_t stack_slot, const char *reg){
-  fprintf(file, "  mov QWORD [rsp + %zu], %s\n", stack_offset_for_slot(stack_slot), reg);
+  if(using_gas_intel_syntax()){
+    fprintf(file, "  mov QWORD PTR [rsp + %zu], %s\n", stack_offset_for_slot(stack_slot), reg);
+  } else {
+    fprintf(file, "  mov QWORD [rsp + %zu], %s\n", stack_offset_for_slot(stack_slot), reg);
+  }
 }
 
 static size_t get_call_stack_reserve(void){
@@ -240,9 +268,17 @@ static void end_c_call(FILE *file){
 
 static void move_first_arg_label(const char *label, FILE *file){
 #ifdef _WIN32
-  fprintf(file, "  lea rcx, [rel %s]\n", label);
+  if(using_gas_intel_syntax()){
+    fprintf(file, "  lea rcx, %s[rip]\n", label);
+  } else {
+    fprintf(file, "  lea rcx, [rel %s]\n", label);
+  }
 #else
-  fprintf(file, "  lea rdi, [rel %s]\n", label);
+  if(using_gas_intel_syntax()){
+    fprintf(file, "  lea rdi, %s[rip]\n", label);
+  } else {
+    fprintf(file, "  lea rdi, [rel %s]\n", label);
+  }
 #endif
 }
 
@@ -473,9 +509,14 @@ static void generate_write_statement(Node *node, FILE *file){
 
     snprintf(label_name, sizeof(label_name), "text%d", string_label);
 
-    fprintf(file, "section .data\n");
-    fprintf(file, "  %s db \"%s\", 0\n", label_name, value_node->value);
-    fprintf(file, "section .text\n");
+    emit_data_section(file);
+    if(using_gas_intel_syntax()){
+      fprintf(file, "%s:\n", label_name);
+      fprintf(file, "  .asciz \"%s\"\n", value_node->value);
+    } else {
+      fprintf(file, "  %s db \"%s\", 0\n", label_name, value_node->value);
+    }
+    emit_text_section(file);
     move_first_arg_label(label_name, file);
     begin_c_call(file);
     fprintf(file, "  call puts\n");
@@ -532,7 +573,7 @@ static void generate_while_statement(Node *node, FILE *file){
   size_t loop_stack_size = stack_size;
 
   if(loop_data == NULL){
-    codegen_error("Malformed while statement");
+    codegen_error("Malformed jabtak statement");
   }
 
   condition_node = loop_data->left;
@@ -560,7 +601,7 @@ static void generate_switch_statement(Node *node, FILE *file){
   size_t switch_stack_slot;
 
   if(switch_data == NULL){
-    codegen_error("Malformed switch statement");
+    codegen_error("Malformed chuno statement");
   }
 
   expression_node = switch_data->left;
@@ -572,7 +613,7 @@ static void generate_switch_statement(Node *node, FILE *file){
 
   while(clause_node != NULL){
     if(clause_count >= MAX_SWITCH_CLAUSES){
-      codegen_error("Too many switch clauses");
+      codegen_error("Too many chuno clauses");
     }
 
     clauses[clause_count].node = clause_node;
@@ -623,7 +664,7 @@ static void generate_switch_statement(Node *node, FILE *file){
     } else if(node_value_is(current_clause, "DEFAULT")){
       generate_block(current_clause->left, file);
     } else {
-      codegen_error("Unknown switch clause");
+      codegen_error("Unknown chuno clause");
     }
   }
 
@@ -632,7 +673,7 @@ static void generate_switch_statement(Node *node, FILE *file){
 
   emit_cleanup_to_stack_size(file, switch_stack_slot);
   if(stack_size == 0){
-    codegen_error("Missing switch expression value on stack");
+    codegen_error("Missing chuno expression value on stack");
   }
   fprintf(file, "  add rsp, 8\n");
   stack_size--;
@@ -642,7 +683,7 @@ static void generate_break_statement(FILE *file){
   ControlContext *context = find_break_context();
 
   if(context == NULL){
-    codegen_error("break can only be used inside while or switch");
+    codegen_error("ruko can only be used inside jabtak or chuno");
   }
 
   emit_cleanup_to_stack_size(file, context->break_stack_size);
@@ -653,7 +694,7 @@ static void generate_continue_statement(FILE *file){
   ControlContext *context = find_continue_context();
 
   if(context == NULL){
-    codegen_error("continue can only be used inside while");
+    codegen_error("jaari can only be used inside jabtak");
   }
 
   emit_cleanup_to_stack_size(file, context->continue_stack_size);
@@ -705,8 +746,33 @@ static void generate_statement(Node *node, FILE *file){
   codegen_error("Unsupported statement in code generator");
 }
 
-int generate_code(Node *root, char *filename){
-  FILE *file = fopen(filename, "w");
+static void emit_data_section(FILE *file){
+  if(using_gas_intel_syntax()){
+    fprintf(file, ".section .data\n");
+  } else {
+    fprintf(file, "section .data\n");
+  }
+}
+
+static void emit_text_section(FILE *file){
+  if(using_gas_intel_syntax()){
+    fprintf(file, ".section .text\n");
+  } else {
+    fprintf(file, "section .text\n");
+  }
+}
+
+int generate_code_with_syntax(Node *root, const char *filename, AssemblySyntax syntax){
+  FILE *file;
+
+  last_codegen_error_message[0] = '\0';
+  if(setjmp(codegen_recovery_point) != 0){
+    return 1;
+  }
+
+  active_assembly_syntax = syntax;
+  file = fopen(filename, "w");
+  active_output_file = file;
 
   if(file == NULL){
     codegen_error("Could not open output assembly file");
@@ -719,14 +785,26 @@ int generate_code(Node *root, char *filename){
   next_label_id = 0;
   next_string_label_id = 0;
 
-  fprintf(file, "default rel\n");
-  fprintf(file, "extern printf\n");
-  fprintf(file, "extern puts\n");
-  fprintf(file, "extern exit\n");
-  fprintf(file, "global main\n");
-  fprintf(file, "section .data\n");
-  fprintf(file, "  printf_format: db \"%s\", 10, 0\n", "%lld");
-  fprintf(file, "section .text\n");
+  if(using_gas_intel_syntax()){
+    fprintf(file, ".intel_syntax noprefix\n");
+    fprintf(file, ".extern printf\n");
+    fprintf(file, ".extern puts\n");
+    fprintf(file, ".extern exit\n");
+    fprintf(file, ".globl main\n");
+    emit_data_section(file);
+    fprintf(file, "printf_format:\n");
+    fprintf(file, "  .asciz \"%s\\n\"\n", "%lld");
+  } else {
+    fprintf(file, "default rel\n");
+    fprintf(file, "extern printf\n");
+    fprintf(file, "extern puts\n");
+    fprintf(file, "extern exit\n");
+    fprintf(file, "global main\n");
+    emit_data_section(file);
+    fprintf(file, "  printf_format: db \"%s\", 10, 0\n", "%lld");
+  }
+
+  emit_text_section(file);
   fprintf(file, "main:\n");
 
   enter_scope();
@@ -737,5 +815,10 @@ int generate_code(Node *root, char *filename){
   fprintf(file, "  ret\n");
 
   fclose(file);
+  active_output_file = NULL;
   return 0;
+}
+
+int generate_code(Node *root, const char *filename){
+  return generate_code_with_syntax(root, filename, ASM_SYNTAX_NASM);
 }

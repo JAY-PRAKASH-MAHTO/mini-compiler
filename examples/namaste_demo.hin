@@ -1,7 +1,7 @@
 namaste() {
   likho("NAMASTE DSL SHURU");
 
-  ginti total = 2 + 3 * 4;
+  ginti total = 2 + 3 + 4;
   likho(total);
 
   agar(total barabar 14) {

@@ -23,7 +23,7 @@
 #endif
 
 #define WINDOW_CLASS_NAME "UnnamedLangEditorWindow"
-#define WINDOW_TITLE "Namaste DSL Editor"
+#define WINDOW_TITLE "BhasaCore Editor"
 
 #define OUTPUT_BAR_HEIGHT 24
 #define MIN_CODE_EDITOR_HEIGHT 140
@@ -33,7 +33,8 @@
 #define PROCESS_LOG_BUFFER_SIZE 16384
 #define COMBINED_LOG_BUFFER_SIZE 32768
 #define WM_SYNC_SCROLLBARS (WM_APP + 1)
-#define CODE_EDIT_ORIGINAL_PROC_PROP "UnnamedLangCodeEditOriginalProc"
+#define EDIT_ORIGINAL_PROC_PROP "UnnamedLangEditOriginalProc"
+#define EDIT_STATE_PROP "UnnamedLangEditState"
 
 #define ID_SOURCE_PATH_EDIT 1001
 #define ID_OPEN_BUTTON 1002
@@ -80,6 +81,17 @@ static void set_default_source_path(EditorState *state, const char *source_path,
 static void request_scrollbar_sync(EditorState *state);
 static void focus_code_editor(EditorState *state);
 static LRESULT CALLBACK code_edit_subclass_proc(HWND window_handle, UINT message, WPARAM w_param, LPARAM l_param);
+static void install_edit_subclass(HWND edit_handle, EditorState *state);
+static void uninstall_edit_subclass(HWND edit_handle);
+static HWND find_wheel_target_edit(EditorState *state, HWND fallback_handle, LPARAM l_param);
+static void scroll_edit_vertically(EditorState *state, HWND edit_handle, int delta_lines);
+static void scroll_edit_horizontally(EditorState *state, HWND edit_handle, int delta_columns);
+static LRESULT handle_edit_mouse_wheel(EditorState *state, HWND source_handle, WPARAM w_param, LPARAM l_param, int is_horizontal);
+static int clamp_int(int value, int minimum, int maximum);
+static int get_visible_lines(HWND control, HFONT font);
+static int get_visible_columns(HWND control, HFONT font);
+static int get_max_line_length(HWND control);
+static void sync_custom_scrollbars(EditorState *state);
 
 static int key_matches(WPARAM w_param, int upper_key){
   int key = (int)w_param;
@@ -87,10 +99,19 @@ static int key_matches(WPARAM w_param, int upper_key){
 }
 
 static LRESULT CALLBACK code_edit_subclass_proc(HWND window_handle, UINT message, WPARAM w_param, LPARAM l_param){
-  WNDPROC default_proc = (WNDPROC)GetPropA(window_handle, CODE_EDIT_ORIGINAL_PROC_PROP);
+  WNDPROC default_proc = (WNDPROC)GetPropA(window_handle, EDIT_ORIGINAL_PROC_PROP);
+  EditorState *state = (EditorState *)GetPropA(window_handle, EDIT_STATE_PROP);
 
   if(default_proc == NULL){
     return DefWindowProcA(window_handle, message, w_param, l_param);
+  }
+
+  if(message == WM_MOUSEWHEEL && state != NULL){
+    return handle_edit_mouse_wheel(state, window_handle, w_param, l_param, 0);
+  }
+
+  if(message == WM_MOUSEHWHEEL && state != NULL){
+    return handle_edit_mouse_wheel(state, window_handle, w_param, l_param, 1);
   }
 
   if(message == WM_KEYDOWN && (GetKeyState(VK_CONTROL) & 0x8000) != 0){
@@ -116,6 +137,144 @@ static LRESULT CALLBACK code_edit_subclass_proc(HWND window_handle, UINT message
   }
 
   return CallWindowProcA(default_proc, window_handle, message, w_param, l_param);
+}
+
+static void install_edit_subclass(HWND edit_handle, EditorState *state){
+  WNDPROC default_proc;
+
+  if(edit_handle == NULL){
+    return;
+  }
+
+  default_proc = (WNDPROC)SetWindowLongPtrA(
+    edit_handle,
+    GWLP_WNDPROC,
+    (LONG_PTR)code_edit_subclass_proc
+  );
+  SetPropA(edit_handle, EDIT_ORIGINAL_PROC_PROP, (HANDLE)default_proc);
+  SetPropA(edit_handle, EDIT_STATE_PROP, (HANDLE)state);
+}
+
+static void uninstall_edit_subclass(HWND edit_handle){
+  WNDPROC default_proc;
+
+  if(edit_handle == NULL){
+    return;
+  }
+
+  default_proc = (WNDPROC)GetPropA(edit_handle, EDIT_ORIGINAL_PROC_PROP);
+  if(default_proc != NULL){
+    SetWindowLongPtrA(edit_handle, GWLP_WNDPROC, (LONG_PTR)default_proc);
+    RemovePropA(edit_handle, EDIT_ORIGINAL_PROC_PROP);
+  }
+  RemovePropA(edit_handle, EDIT_STATE_PROP);
+}
+
+static HWND find_wheel_target_edit(EditorState *state, HWND fallback_handle, LPARAM l_param){
+  POINT screen_point;
+  HWND hovered_window;
+
+  screen_point.x = (int)(short)LOWORD(l_param);
+  screen_point.y = (int)(short)HIWORD(l_param);
+  hovered_window = WindowFromPoint(screen_point);
+
+  if(hovered_window == state->code_edit || IsChild(state->code_edit, hovered_window)){
+    return state->code_edit;
+  }
+
+  if(hovered_window == state->log_edit || IsChild(state->log_edit, hovered_window)){
+    return state->log_edit;
+  }
+
+  return fallback_handle;
+}
+
+static void scroll_edit_vertically(EditorState *state, HWND edit_handle, int delta_lines){
+  if(edit_handle == NULL || delta_lines == 0){
+    return;
+  }
+
+  SendMessageA(edit_handle, EM_LINESCROLL, 0, delta_lines);
+  sync_custom_scrollbars(state);
+}
+
+static void scroll_edit_horizontally(EditorState *state, HWND edit_handle, int delta_columns){
+  int *horizontal_position = NULL;
+  int max_columns;
+  int visible_columns;
+  int maximum_position;
+  int new_position;
+  int applied_delta;
+
+  if(edit_handle == state->code_edit){
+    horizontal_position = &state->code_horizontal_scroll;
+  } else if(edit_handle == state->log_edit){
+    horizontal_position = &state->log_horizontal_scroll;
+  } else {
+    return;
+  }
+
+  max_columns = get_max_line_length(edit_handle);
+  visible_columns = get_visible_columns(edit_handle, state->code_font);
+  maximum_position = max_columns - visible_columns;
+  if(maximum_position < 0){
+    maximum_position = 0;
+  }
+
+  new_position = clamp_int(*horizontal_position + delta_columns, 0, maximum_position);
+  applied_delta = new_position - *horizontal_position;
+  if(applied_delta == 0){
+    sync_custom_scrollbars(state);
+    return;
+  }
+
+  SendMessageA(edit_handle, EM_LINESCROLL, applied_delta, 0);
+  *horizontal_position = new_position;
+  sync_custom_scrollbars(state);
+}
+
+static LRESULT handle_edit_mouse_wheel(EditorState *state, HWND source_handle, WPARAM w_param, LPARAM l_param, int is_horizontal){
+  HWND target_edit;
+  int wheel_steps = GET_WHEEL_DELTA_WPARAM(w_param) / WHEEL_DELTA;
+  UINT system_scroll_amount = 0;
+  int scroll_amount;
+
+  if(state == NULL || wheel_steps == 0){
+    return 0;
+  }
+
+  target_edit = find_wheel_target_edit(state, source_handle, l_param);
+  if(target_edit == NULL){
+    return 0;
+  }
+
+  if(is_horizontal || (GetKeyState(VK_SHIFT) & 0x8000) != 0){
+    if(!SystemParametersInfoA(SPI_GETWHEELSCROLLCHARS, 0, &system_scroll_amount, 0) || system_scroll_amount == 0){
+      system_scroll_amount = 3;
+    }
+    scroll_amount = (int)system_scroll_amount;
+    scroll_edit_horizontally(state, target_edit, -wheel_steps * scroll_amount);
+  } else {
+    if(!SystemParametersInfoA(SPI_GETWHEELSCROLLLINES, 0, &system_scroll_amount, 0)){
+      system_scroll_amount = 3;
+    }
+
+    if(system_scroll_amount == WHEEL_PAGESCROLL){
+      scroll_amount = get_visible_lines(target_edit, state->code_font);
+    } else if(system_scroll_amount == 0){
+      scroll_amount = 3;
+    } else {
+      scroll_amount = (int)system_scroll_amount;
+    }
+
+    if(scroll_amount <= 0){
+      scroll_amount = 1;
+    }
+
+    scroll_edit_vertically(state, target_edit, -wheel_steps * scroll_amount);
+  }
+
+  return 0;
 }
 
 static const char *find_last_path_separator(const char *path){
@@ -464,17 +623,17 @@ static void load_initial_source(EditorState *state){
   char sample_path[MAX_PATH];
   char default_source_path[MAX_PATH];
 
-  resolve_source_path(state, "examples\\namaste_demo.dsl", source_path, sizeof(source_path));
+  resolve_source_path(state, "examples\\namaste_demo.hin", source_path, sizeof(source_path));
   if(load_source_from_path(state, source_path, 0)){
     return;
   }
 
-  resolve_source_path(state, "examples\\hello.dsl", sample_path, sizeof(sample_path));
+  resolve_source_path(state, "examples\\hello.hin", sample_path, sizeof(sample_path));
   if(load_source_from_path(state, sample_path, 0)){
     return;
   }
 
-  join_paths(state->project_directory, "interactive.dsl", default_source_path, sizeof(default_source_path));
+  join_paths(state->project_directory, "interactive.hin", default_source_path, sizeof(default_source_path));
   set_default_source_path(
     state,
     default_source_path,
@@ -494,7 +653,7 @@ static int derive_output_path_from_source(const char *source_path, char *output_
 }
 
 static int derive_source_file_name(const char *source_name, char *source_file_name, size_t source_file_name_size){
-  return derive_path_with_extension(source_name, ".dsl", source_file_name, source_file_name_size);
+  return derive_path_with_extension(source_name, ".hin", source_file_name, source_file_name_size);
 }
 
 static void append_text(char *buffer, size_t buffer_size, const char *text){
@@ -633,7 +792,7 @@ static void get_default_dialog_source_path(EditorState *state, char *source_path
 
   GetWindowTextA(state->source_path_edit, source_name, sizeof(source_name));
   if(!derive_source_path_from_name(state, source_name, source_path, source_path_size) || source_path[0] == '\0'){
-    join_paths(state->project_directory, "interactive.dsl", source_path, source_path_size);
+    join_paths(state->project_directory, "interactive.hin", source_path, source_path_size);
   }
 }
 
@@ -803,10 +962,10 @@ static void open_source_file(EditorState *state){
   open_file_name.hwndOwner = state->window_handle;
   open_file_name.lpstrFile = source_path;
   open_file_name.nMaxFile = sizeof(source_path);
-  open_file_name.lpstrFilter = "Namaste DSL source (*.dsl)\0*.dsl\0All files (*.*)\0*.*\0";
+  open_file_name.lpstrFilter = "BhasaCore source (*.hin)\0*.hin\0All files (*.*)\0*.*\0";
   open_file_name.nFilterIndex = 1;
   open_file_name.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
-  open_file_name.lpstrDefExt = "dsl";
+  open_file_name.lpstrDefExt = "hin";
 
   if(!GetOpenFileNameA(&open_file_name)){
     show_dialog_error(state->window_handle);
@@ -833,10 +992,10 @@ static void save_source_as(EditorState *state){
   save_file_name.hwndOwner = state->window_handle;
   save_file_name.lpstrFile = source_path;
   save_file_name.nMaxFile = sizeof(source_path);
-  save_file_name.lpstrFilter = "Namaste DSL source (*.dsl)\0*.dsl\0All files (*.*)\0*.*\0";
+  save_file_name.lpstrFilter = "BhasaCore source (*.hin)\0*.hin\0All files (*.*)\0*.*\0";
   save_file_name.nFilterIndex = 1;
   save_file_name.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
-  save_file_name.lpstrDefExt = "dsl";
+  save_file_name.lpstrDefExt = "hin";
 
   if(!GetSaveFileNameA(&save_file_name)){
     show_dialog_error(state->window_handle);
@@ -1607,14 +1766,7 @@ static LRESULT CALLBACK editor_window_proc(HWND window_handle, UINT message, WPA
         NULL
       );
 
-      {
-        WNDPROC default_proc = (WNDPROC)SetWindowLongPtrA(
-          state->code_edit,
-          GWLP_WNDPROC,
-          (LONG_PTR)code_edit_subclass_proc
-        );
-        SetPropA(state->code_edit, CODE_EDIT_ORIGINAL_PROC_PROP, (HANDLE)default_proc);
-      }
+      install_edit_subclass(state->code_edit, state);
 
       state->code_vscroll = CreateWindowExA(
         0,
@@ -1660,6 +1812,8 @@ static LRESULT CALLBACK editor_window_proc(HWND window_handle, UINT message, WPA
         GetModuleHandleA(NULL),
         NULL
       );
+
+      install_edit_subclass(state->log_edit, state);
 
       state->log_vscroll = CreateWindowExA(
         0,
@@ -1746,6 +1900,12 @@ static LRESULT CALLBACK editor_window_proc(HWND window_handle, UINT message, WPA
       }
       break;
 
+    case WM_MOUSEWHEEL:
+      return handle_edit_mouse_wheel(state, find_wheel_target_edit(state, state->code_edit, l_param), w_param, l_param, 0);
+
+    case WM_MOUSEHWHEEL:
+      return handle_edit_mouse_wheel(state, find_wheel_target_edit(state, state->code_edit, l_param), w_param, l_param, 1);
+
     case WM_VSCROLL:
       if((HWND)l_param == state->code_vscroll || (HWND)l_param == state->log_vscroll){
         handle_external_scroll(state, (HWND)l_param, SB_VERT, LOWORD(w_param));
@@ -1810,13 +1970,8 @@ static LRESULT CALLBACK editor_window_proc(HWND window_handle, UINT message, WPA
       return 0;
 
     case WM_DESTROY:
-      if(state->code_edit != NULL){
-        WNDPROC default_proc = (WNDPROC)GetPropA(state->code_edit, CODE_EDIT_ORIGINAL_PROC_PROP);
-        if(default_proc != NULL){
-          SetWindowLongPtrA(state->code_edit, GWLP_WNDPROC, (LONG_PTR)default_proc);
-          RemovePropA(state->code_edit, CODE_EDIT_ORIGINAL_PROC_PROP);
-        }
-      }
+      uninstall_edit_subclass(state->code_edit);
+      uninstall_edit_subclass(state->log_edit);
       if(state->code_font != NULL && state->code_font != GetStockObject(ANSI_FIXED_FONT)){
         DeleteObject(state->code_font);
       }
