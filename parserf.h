@@ -8,6 +8,7 @@
 
 typedef struct Node{
   char *value;
+  int owns_value;
   TokenType type;
   size_t line_num;
   struct Node *right;

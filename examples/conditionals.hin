@@ -1,0 +1,25 @@
+namaste() {
+  ginti marks = 78;
+
+  agar(marks >= 90) {
+    likho("A grade");
+  } warna {
+    agar(marks >= 75) {
+      likho("B grade");
+    } warna {
+      agar(marks >= 60) {
+        likho("C grade");
+      } warna {
+        likho("Needs improvement");
+      }
+    }
+  }
+
+  agar(marks bada 50) {
+    likho("Pass");
+  } warna {
+    likho("Fail");
+  }
+
+  niklo(0);
+}

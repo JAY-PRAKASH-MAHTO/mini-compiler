@@ -14,6 +14,7 @@
 #include "editor_win.h"
 #endif
 #include "lexerf.h"
+#include "optimizerf.h"
 #include "parserf.h"
 #include "semanticf.h"
 
@@ -331,6 +332,8 @@ int main(int argc, char *argv[]){
   if(error_list_has_errors(&errors)){
     goto finish;
   }
+
+  optimize_ast(root);
 
   if(options.asm_only){
     append_extension_if_missing(options.output_name, ".asm", asm_output_filename, sizeof(asm_output_filename));

@@ -1,7 +1,7 @@
 CC ?= gcc
 CFLAGS ?= -Wall -Wextra -std=c11
 
-COMMON_SOURCES = main.c diagnostics.c lexerf.c parserf.c semanticf.c codegeneratorf.c
+COMMON_SOURCES = main.c diagnostics.c lexerf.c parserf.c semanticf.c optimizerf.c codegeneratorf.c
 WINDOWS_SOURCES = $(COMMON_SOURCES) editor_win.c
 
 ifeq ($(OS),Windows_NT)

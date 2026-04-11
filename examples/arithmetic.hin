@@ -1,0 +1,19 @@
+namaste() {
+  ginti a = 20;
+  ginti b = 6;
+
+  ginti sum = a + b;
+  ginti diff = a - b;
+  ginti product = a * b;
+  ginti quotient = a / b;
+  ginti remainder = a % b;
+
+  likho("ARITHMETIC TEST");
+  likho(sum);
+  likho(diff);
+  likho(product);
+  likho(quotient);
+  likho(remainder);
+
+  niklo(0);
+}

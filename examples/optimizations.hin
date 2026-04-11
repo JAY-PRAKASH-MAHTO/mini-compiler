@@ -1,0 +1,32 @@
+namaste() {
+  ginti folded = (2 + 3) * 4;
+
+  agar(10 barabar 10) {
+    likho(folded);
+  } warna {
+    likho(999);
+  }
+
+  agar(1 alag 1) {
+    likho(111);
+  }
+
+  jabtak(5 chhota 3) {
+    likho(222);
+  }
+
+  chuno(3 - 1) {
+    mamla 1:
+      likho(100);
+      ruko;
+    mamla 2:
+      likho(200);
+      ruko;
+    baki:
+      likho(300);
+      ruko;
+  }
+
+  niklo(0);
+  likho(444);
+}

@@ -1,0 +1,9 @@
+namaste() {
+  ginti total = "das";
+
+  agar(total barabar "10") {
+    likho("type issue");
+  }
+
+  niklo(0);
+}

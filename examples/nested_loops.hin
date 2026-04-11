@@ -1,0 +1,20 @@
+namaste() {
+  ginti outer = 1;
+
+  jabtak(outer <= 3) {
+    ginti inner = 1;
+
+    jabtak(inner <= 4) {
+      agar(inner barabar 3) {
+        ruko;
+      }
+
+      likho(outer * 10 + inner);
+      inner = inner + 1;
+    }
+
+    outer = outer + 1;
+  }
+
+  niklo(0);
+}

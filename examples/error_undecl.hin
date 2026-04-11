@@ -1,0 +1,9 @@
+namaste() {
+  total = 10;
+  likho(total);
+
+  ginti next = total + 1;
+  likho(next);
+
+  niklo(0);
+}

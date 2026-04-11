@@ -1,0 +1,16 @@
+namaste() {
+  ginti count = 0;
+  ginti a = 0;
+  ginti b = 1;
+
+  likho("FIBONACCI SERIES");
+  jabtak(count < 7) {
+    likho(a);
+    ginti next = a + b;
+    a = b;
+    b = next;
+    count = count + 1;
+  }
+
+  niklo(0);
+}

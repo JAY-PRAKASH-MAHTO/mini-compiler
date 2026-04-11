@@ -1,0 +1,22 @@
+namaste() {
+  ginti value = 0;
+
+  jabtak(value < 5) {
+    chuno(value) {
+      mamla 1:
+        likho("ek");
+        value = value + 1;
+        jaari;
+      mamla 3:
+        likho("teen");
+        ruko;
+      baki:
+        likho(value);
+        ruko;
+    }
+
+    value = value + 1;
+  }
+
+  niklo(0);
+}

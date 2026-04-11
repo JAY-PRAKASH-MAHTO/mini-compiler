@@ -1,0 +1,19 @@
+namaste() {
+  ginti number = 12;
+
+  agar(number > 0) {
+    agar(number >= 10) {
+      likho("positive double digit");
+    } warna {
+      likho("positive single digit");
+    }
+  } warna {
+    agar(number barabar 0) {
+      likho("zero");
+    } warna {
+      likho("negative");
+    }
+  }
+
+  niklo(0);
+}

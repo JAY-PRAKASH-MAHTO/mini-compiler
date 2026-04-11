@@ -56,6 +56,7 @@ Node *init_node(Node *node, char *value, TokenType type, size_t line_num){
   }
 
   node->value = value;
+  node->owns_value = 0;
   node->type = type;
   node->line_num = line_num;
   node->left = NULL;
@@ -741,5 +742,8 @@ void free_ast(Node *node){
 
   free_ast(node->left);
   free_ast(node->right);
+  if(node->owns_value && node->value != NULL){
+    free(node->value);
+  }
   free(node);
 }

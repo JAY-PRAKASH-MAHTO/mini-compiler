@@ -1,0 +1,12 @@
+namaste() {
+  ginti total = 42;
+  ginti next = total + 8;
+
+  likho("OUTPUT TEST START");
+  likho(total);
+  likho("SECOND VALUE");
+  likho(next);
+  likho("OUTPUT TEST END");
+
+  niklo(0);
+}

@@ -1,0 +1,30 @@
+namaste() {
+  likho("FULL PIPELINE START");
+
+  ginti total = 0;
+  ginti i = 1;
+
+  jabtak(i <= 5) {
+    agar(i barabar 3) {
+      i = i + 1;
+      jaari;
+    }
+
+    total = total + i;
+    i = i + 1;
+  }
+
+  likho(total);
+
+  chuno(total) {
+    mamla 12:
+      likho("expected sum");
+      ruko;
+    baki:
+      likho("unexpected sum");
+      ruko;
+  }
+
+  likho("FULL PIPELINE END");
+  niklo(0);
+}

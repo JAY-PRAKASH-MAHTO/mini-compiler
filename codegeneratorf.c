@@ -710,6 +710,10 @@ static void generate_statement(Node *node, FILE *file){
     generate_variable_declaration(node, file);
     return;
   }
+  if(node_value_is(node, "BLOCK")){
+    generate_block(node, file);
+    return;
+  }
   if(node_value_is(node, "EXIT")){
     generate_exit_statement(node, file);
     return;

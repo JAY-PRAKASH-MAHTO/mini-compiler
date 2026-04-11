@@ -1,10 +1,12 @@
 * text=auto
 
+.gitattributes text eol=lf
 *.c text eol=lf
 *.h text eol=lf
 *.md text eol=lf
 *.sh text eol=lf
 *.hin text eol=lf
+Makefile text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
 

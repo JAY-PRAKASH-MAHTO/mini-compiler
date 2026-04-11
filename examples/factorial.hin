@@ -1,0 +1,19 @@
+namaste() {
+  ginti number = 5;
+  ginti result = 1;
+
+  agar(number <= 1) {
+    result = 1;
+  } warna {
+    ginti i = 2;
+    jabtak(i <= number) {
+      result = result * i;
+      i = i + 1;
+    }
+  }
+
+  likho("FACTORIAL RESULT");
+  likho(result);
+
+  niklo(0);
+}

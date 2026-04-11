@@ -1,0 +1,19 @@
+namaste() {
+  ginti i = 0;
+
+  jabtak(i < 7) {
+    i = i + 1;
+
+    agar(i barabar 2) {
+      jaari;
+    }
+
+    agar(i barabar 6) {
+      ruko;
+    }
+
+    likho(i);
+  }
+
+  niklo(0);
+}

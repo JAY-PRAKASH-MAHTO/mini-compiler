@@ -1,0 +1,19 @@
+namaste() {
+  ginti total = 10
+
+  agar(total barabar 10 {
+    likho("missing bracket")
+  } warna {
+    likho("parser recovery works");
+  }
+
+  chuno(total) {
+    mamla:
+      likho("missing case value");
+      ruko
+    baki
+      likho("missing colon");
+  }
+
+  niklo(0)
+}

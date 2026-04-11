@@ -1,5 +1,7 @@
 # BhasaCore
 
+[![CI](https://github.com/JAY-PRAKASH-MAHTO/mini-compiler/actions/workflows/ci.yml/badge.svg)](https://github.com/JAY-PRAKASH-MAHTO/mini-compiler/actions/workflows/ci.yml)
+
 BhasaCore is an end-to-end compiler written in C for a Hindi-flavored domain-specific language. It reads `.hin` source files, performs lexical analysis, parsing, semantic checking, assembly generation, and produces native executables through GCC.
 
 ```text
@@ -7,6 +9,7 @@ source.hin
   -> lexer
   -> parser / AST
   -> semantic analyzer
+  -> optimizer
   -> x86-64 assembly generator
   -> object file
   -> native executable
@@ -17,6 +20,7 @@ source.hin
 - Compiles `.hin` programs into native executables
 - Exposes the full compiler pipeline for learning and debugging
 - Supports variables, arithmetic, conditions, loops, `chuno` blocks, and output
+- Performs AST-level optimization before code generation
 - Includes a Windows editor for writing, compiling, and running programs
 - Falls back to GCC's assembler when NASM is not available
 
@@ -106,19 +110,28 @@ It supports:
 - invalid `jaari` outside loop
 - duplicate `mamla` values inside a `chuno` block
 
-### 4. Code Generation
+### 4. Optimization
+
+`optimizerf.c` rewrites the AST after semantic checks and before assembly generation. It currently performs:
+
+- constant folding for arithmetic expressions
+- constant-condition simplification for `agar`, `jabtak`, and `chuno`
+- dead code elimination for unreachable statements after `niklo`, `ruko`, `jaari`, and fully-terminating branches
+- CFG-style fallthrough analysis to detect whether later statements in a block are reachable
+
+### 5. Code Generation
 
 `codegeneratorf.c` emits x86-64 assembly.
 
 - NASM syntax is used when NASM is available
 - GAS Intel syntax is used automatically when NASM is missing and GCC fallback assembly is needed
 
-### 5. Native Build Driver
+### 6. Native Build Driver
 
 `main.c` coordinates the full build:
 
 - reads `.hin` source input
-- runs lexer, parser, semantic analysis, and code generation
+- runs lexer, parser, semantic analysis, optimization, and code generation
 - assembles generated output
 - links the final executable with GCC
 
@@ -135,6 +148,12 @@ It supports:
 - `chuno`, `mamla`, `baki`
 - `ruko` and `jaari`
 - comments with `#`, `//`, and `/* ... */`
+
+Optimization passes:
+
+- constant folding
+- dead code elimination
+- CFG-style reachability analysis on statement lists
 
 ## Temporary File Behavior
 
@@ -301,6 +320,7 @@ Editor features:
 |-- lexerf.c / lexerf.h
 |-- parserf.c / parserf.h
 |-- semanticf.c / semanticf.h
+|-- optimizerf.c / optimizerf.h
 |-- codegeneratorf.c / codegeneratorf.h
 |-- editor_win.c / editor_win.h
 |-- examples/
@@ -313,12 +333,36 @@ Editor features:
 
 ## Example Programs
 
-- `examples/hello.hin` shows a minimal output and arithmetic program
-- `examples/loop.hin` demonstrates `jabtak`
-- `examples/control_flow.hin` demonstrates `agar`, `chuno`, `mamla`, `baki`, `ruko`, and `jaari`
-- `examples/fizzbuzz.hin` demonstrates nested conditions and arithmetic
-- `examples/full_demo.hin` shows a larger end-to-end language walkthrough
-- `examples/namaste_demo.hin` is a compact showcase program
+| Program | Features Exercised |
+| --- | --- |
+| `examples/hello.hin` | `namaste`, `likho`, string literal |
+| `examples/arithmetic.hin` | `ginti`, arithmetic operators, expressions |
+| `examples/conditionals.hin` | `agar`, `warna`, relational operators |
+| `examples/nested_loops.hin` | `jabtak`, nested loops, `ruko` |
+| `examples/fibonacci.hin` | loops, variables, iterative computation |
+| `examples/factorial.hin` | loops, arithmetic, control flow |
+| `examples/switch_stmt.hin` | `chuno`, `mamla`, `baki`, `ruko`, `jaari` |
+| `examples/output_test.hin` | `likho`, string and integer output |
+| `examples/optimizations.hin` | constant folding, dead code elimination, constant control-flow pruning |
+| `examples/break_continue.hin` | `ruko`, `jaari` inside loops |
+| `examples/nested_if.hin` | nested `agar` conditions |
+| `examples/error_undecl.hin` | undeclared variable detection |
+| `examples/error_types.hin` | invalid integer-only usage checks |
+| `examples/error_syntax.hin` | multiple syntax errors and recovery |
+| `examples/full_pipeline.hin` | complete compilation (lexer -> GCC executable) |
+
+Intentional failure cases:
+
+- `error_undecl.hin`, `error_types.hin`, and `error_syntax.hin` are meant to be compiled to inspect diagnostics
+- the remaining examples should compile into runnable executables
+
+Additional bundled demos:
+
+- `examples/loop.hin`
+- `examples/control_flow.hin`
+- `examples/fizzbuzz.hin`
+- `examples/full_demo.hin`
+- `examples/namaste_demo.hin`
 
 ## Why This Project Fits Compiler Design
 

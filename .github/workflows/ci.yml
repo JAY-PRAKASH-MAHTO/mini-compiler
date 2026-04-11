@@ -23,14 +23,24 @@ jobs:
       - name: Build the compiler
         run: bash build.sh
 
-      - name: Compile hello sample program
-        run: ./build/bhasacore ./examples/hello.hin ci_hello_demo
+      - name: Compile and run sample programs
+        run: |
+          set -eu
+          ./build/bhasacore ./examples/hello.hin ci_hello_demo
+          ./ci_hello_demo
+          ./build/bhasacore ./examples/full_demo.hin ci_full_demo
+          ./ci_full_demo
+          ./build/bhasacore ./examples/optimizations.hin ci_optimizations_demo
+          ./ci_optimizations_demo
+          ./build/bhasacore ./examples/switch_stmt.hin ci_switch_demo
+          ./ci_switch_demo
 
-      - name: Run hello sample program
-        run: ./ci_hello_demo
-
-      - name: Compile full sample program
-        run: ./build/bhasacore ./examples/full_demo.hin ci_full_demo
-
-      - name: Run full sample program
-        run: ./ci_full_demo
+      - name: Verify intentional diagnostic sample fails
+        run: |
+          set -eu
+          if ./build/bhasacore ./examples/error_undecl.hin ci_error_undecl_demo > ci_error_undecl.log 2>&1; then
+            echo "Expected examples/error_undecl.hin to fail, but it succeeded."
+            cat ci_error_undecl.log
+            exit 1
+          fi
+          cat ci_error_undecl.log
